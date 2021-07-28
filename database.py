@@ -1,4 +1,5 @@
 import sqlite3
+import re
 
 
 class DefaultType():
@@ -42,6 +43,7 @@ class Database:
             sql = db.cursor()
 
             sql.execute("CREATE TABLE IF NOT EXISTS chats (chat_id INT, user_id INT, fields)")
+            sql.execute("CREATE TABLE IF NOT EXISTS library (library_name, custom_names, description, books, hrefs)")
 
     def get_user(self, chat_id, user_id):
         """ Полуить пользователя из базы данных (или создать и получить) """
@@ -96,3 +98,120 @@ class Database:
             user = self.get_user(chat_id, user_id)
             fields = self._set_field(user[2], field_name, value)
             sql.execute("UPDATE chats SET fields=? WHERE chat_id=? and user_id=?", (fields, chat_id, user_id))
+
+    def new_library(self, library_name) -> bool:
+        """ Добавление новой библиотеки """
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("SELECT * FROM library WHERE library_name=?", (library_name,))
+
+            if sql.fetchone():
+                return False
+
+            sql.execute("INSERT INTO library VALUES (?, ?, ?, ?, ?)", (library_name, "", "", "", ""))
+
+            return True
+
+    def get_library_name(self, library_name):
+        """ Получить имя библиотеки """
+
+        library_name = library_name.lower()
+        librarys = self.get_all_library_names()
+
+        for library in librarys:
+            if library[0] == library_name:
+                return library[0]
+
+            for _lib_name in library[1]:
+                if _lib_name == library_name:
+                    return library[0]
+
+            return None
+
+    def get_library(self, library_name) -> list:
+        """ Получить библиотеку
+
+            Возвращает [описание, книги, ссылки]
+         """
+
+        library_name = self.get_library_name(library_name)
+        if library_name is None:
+            return False
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("SELECT * FROM library WHERE library_name=?", (library_name,))
+
+            library = sql.fetchone()
+
+            books = library[3]
+            hrefs = [href.split("  ") for href in library[4].split("&") if len(href)]
+
+            # print(hrefs)
+
+            return [library[2].capitalize(), books, hrefs]
+
+    def get_all_library_names(self) -> list:
+        """ Получить все имена всех библиотек """
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("SELECT * FROM library")
+
+            return [[library[0], library[1].split("&")] for library in sql.fetchall()]
+
+    def add_library_href(self, library_name, href, descripion) -> bool:
+        """ Добавить библиотеке ссылку """
+
+        library_name = self.get_library_name(library_name)
+        if library_name is None:
+            return False
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("SELECT hrefs FROM library WHERE library_name=?", (library_name,))
+
+            l_hrefs = sql.fetchone()[0]
+            l_hrefs += f"{href}  {descripion}&"
+
+            sql.execute("UPDATE library SET hrefs=? WHERE library_name=?", (l_hrefs, library_name))
+
+        return True
+
+    def del_library_href(self, library_name, href) -> bool:
+        """ Удалить ссылку у библиотеки """
+
+        library_name = self.get_library_name(library_name)
+        if library_name is None:
+            return False
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("SELECT hrefs FROM library WHERE library_name=?", (library_name,))
+
+            l_hrefs = sql.fetchone()[0]
+            if href in l_hrefs:
+                for hr in l_hrefs.split("&"):
+                    if href in hr:
+                        l_hrefs = l_hrefs.replace(f"{hr}&", "")
+                        break
+            else:
+                return False
+
+            sql.execute("UPDATE library SET hrefs=? WHERE library_name=?", (l_hrefs, library_name))
+
+        return True
+
+    def set_library_description(self, library_name, description) -> bool:
+        """ Установить описание библиотеки """
+
+        library_name = self.get_library_name(library_name)
+        if library_name is None:
+            return False
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("UPDATE library SET description=? WHERE library_name=?", (description, library_name))
+
+        return True

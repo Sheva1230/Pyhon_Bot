@@ -5,7 +5,7 @@ import os
 
 import vkbottle
 
-from AI import AI, AIMessageTypes
+from AI import AI
 from database import Database, DefaultTypes
 from vkbottle.bot import Bot, Message
 
@@ -56,24 +56,98 @@ async def message(message: Message):
     user = await bot.get_user_from_message(message)
     ai_recognize = ai.recognite(text)
 
-    if ai_recognize.censure is not None:
+    # print(ai_recognize.type)
+
+    if ai_recognize.type == "CENSURE":
         bot.add_warning_msg(message)
-        await message.answer(ai_recognize.censure.answer.format(user.first_name, user.last_name))
         await message.answer(f"Это ваше {bot.get_warnings_msg(message)} предупреждение")
         pass
 
-    if ai_recognize.type == AIMessageTypes.COMMAND:
-        if ai_recognize.command.command == "test":
-            await message.answer("test passed")
+    if ai_recognize.type == "COMMAND":  # Если получили комманду
+        args = ai_recognize.command.args
+        # print(args)
+        if ai_recognize.command.command == "help":
+            if not len(args[0]):
+                await message.answer("/library [coms] - работа с библиотекой\n\n"
+                                     "Для подробной помощи напишите - /help [command]")
+                return
+            if "library" in args[0]:
+                await message.answer("/library new  [lib_name] - добавить библиотеку\n\n"
+                                     "/library set-desc [lib_name] [desc] - установить описание\n\n"
+                                     "/library add-href [lib_name] [href_name] [href_desc] - добавить ссылку\n\n")
+                return
+            else:
+                await message.answer("Ничем не могу вам помочь!")
+                return
 
-    if ai_recognize.type == AIMessageTypes.HELLO:
-        await message.answer(ai_recognize.message.answer.format(user.first_name, user.last_name))
+        if len(args) < 2:
+            await message.answer("Слишком мало аргуметов!")
+            return
 
-    if not ai_recognize.to_me:
+        if ai_recognize.command.command == "library":
+            if args[0] == "new":
+                bot.database.new_library(args[1])
+                await message.answer(f"Библиотека {args[1]} успешно добавлена")
+                return
+
+            if len(args) < 3:
+                await message.answer("Слишком мало аргуметов!")
+                return
+            if args[0] == "set-desc":
+                if bot.database.set_library_description(args[1], args[2]):
+                    await message.answer(f"Описание изменено!")
+                else:
+                    await message.answer(f"Библиотека {args[1]} не найдена!")
+                return
+            if args[0] == "del-href":
+                if bot.database.del_library_href(args[1], args[2]):
+                    await message.answer(f"Ссылка удалена!")
+                else:
+                    await message.answer(f"Библиотека {args[1]} или ссылка {args[2]} не найдена!")
+                return
+
+            if len(args) < 4:
+                await message.answer("Слишком мало аргуметов!")
+                return
+            if args[0] == "add-href":
+                if bot.database.add_library_href(args[1], args[2], args[3]):
+                    await message.answer(f"Ссылки успешно добавлны")
+                else:
+                    await message.answer(f"Библиотека {args[1]} не найдена!")
+                return
+
+    # print(ai_recognize.call_me, ai_recognize.type)
+
+    if not ai_recognize.call_me:
         return
 
-    if ai_recognize.type == AIMessageTypes.UNKNOWN:
-        await message.answer(ai_recognize.message.answer)
+    if ai_recognize.type == "LIBRARY_HELP":   # Если получили запрос о библиотеке
+        librarys = bot.database.get_all_library_names()
+        library_name = ""
+
+        for library in librarys:   # Перебираем все имена всех библиотек и пытаемся понять, какое из имен подходит
+            if library[0] in text:
+                library_name = library[0]
+                break
+            for _lib_name in library[1]:
+                if _lib_name in text:
+                    library_name = library[0]
+                    break
+        else:
+            await message.answer("Библиотека не найдена!")
+
+        # print(library_name)
+        library = bot.database.get_library(library_name)
+
+        hrefs = ""
+        if len(library[2]):
+            for href in library[2]:
+                hrefs += f"{href[0]}: {href[1]}\n"
+
+        await message.answer(f"Библиотека: {library_name}\n\n"
+                             f"[Описание]:\n{(library[0] if len(library[0]) else 'Нету')}\n\n"
+                             f"[Советую почитать]:\n{(library[1] if len(library[1]) else 'Ничего')}\n\n"
+                             f"[Полезные ссылки]:\n{hrefs if len(hrefs) else 'Отсутствуют'}")
 
 
 print("!Run!")
