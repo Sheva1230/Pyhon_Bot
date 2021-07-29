@@ -111,7 +111,7 @@ class AI:
         if message_type == "COMMAND":   # Если сообщение это комманда
             message = message.replace(self.ai_config["command_prefix"], "", 1)
             ai_message.command = Command(message.split()[0], None)
-            message = message.replace(f"{ai_message.command.command}", "", 1).replace(" ", "")
+            message = message.replace(f"{ai_message.command.command}", "", 1).replace(" ", "", 1)
             ai_message.command.args = message.split("  ")
 
         return ai_message

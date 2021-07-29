@@ -137,7 +137,7 @@ class Database:
 
         library_name = self.get_library_name(library_name)
         if library_name is None:
-            return False
+            return None
 
         with sqlite3.connect("database.db") as db:
             sql = db.cursor()
@@ -145,7 +145,7 @@ class Database:
 
             library = sql.fetchone()
 
-            books = library[3]
+            books = [book.split("  ") for book in library[3].split("&") if len(book)]
             hrefs = [href.split("  ") for href in library[4].split("&") if len(href)]
 
             # print(hrefs)
@@ -161,7 +161,7 @@ class Database:
 
             return [[library[0], library[1].split("&")] for library in sql.fetchall()]
 
-    def add_library_href(self, library_name, href, descripion) -> bool:
+    def add_library_href(self, library_name, href, description) -> bool:
         """ Добавить библиотеке ссылку """
 
         library_name = self.get_library_name(library_name)
@@ -173,7 +173,9 @@ class Database:
             sql.execute("SELECT hrefs FROM library WHERE library_name=?", (library_name,))
 
             l_hrefs = sql.fetchone()[0]
-            l_hrefs += f"{href}  {descripion}&"
+            if href in l_hrefs:
+                return False
+            l_hrefs += f"{href}  {description}&"
 
             sql.execute("UPDATE library SET hrefs=? WHERE library_name=?", (l_hrefs, library_name))
 
@@ -200,6 +202,50 @@ class Database:
                 return False
 
             sql.execute("UPDATE library SET hrefs=? WHERE library_name=?", (l_hrefs, library_name))
+
+        return True
+
+    def add_library_book(self, library_name, name, author, description):
+        """ Добавить книгу библиотеке """
+
+        library_name = self.get_library_name(library_name)
+        if library_name is None:
+            return False
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("SELECT hrefs FROM library WHERE library_name=?", (library_name,))
+
+            l_books = sql.fetchone()[0]
+            if name in l_books:
+                return False
+            l_books += f"{name}  {author}  {description}&"
+
+            sql.execute("UPDATE library SET books=? WHERE library_name=?", (l_books, library_name))
+
+            return True
+
+    def del_library_book(self, library_name, book) -> bool:
+        """ Удалить книгу у библиотеки """
+
+        library_name = self.get_library_name(library_name)
+        if library_name is None:
+            return False
+
+        with sqlite3.connect("database.db") as db:
+            sql = db.cursor()
+            sql.execute("SELECT books FROM library WHERE library_name=?", (library_name,))
+
+            l_books = sql.fetchone()[0]
+            if book in l_books:
+                for bk in l_books.split("&"):
+                    if book in bk:
+                        l_books = l_books.replace(f"{bk}&", "")
+                        break
+            else:
+                return False
+
+            sql.execute("UPDATE library SET books=? WHERE library_name=?", (l_books, library_name))
 
         return True
 
