@@ -1,9 +1,5 @@
 import json
-import random
-import re
 import os
-
-import vkbottle
 
 from AI import AI, Command
 from database import Database, DefaultTypes
@@ -44,7 +40,6 @@ class VkBot(Bot):  # Класс бота
                 for name in aliases:
                     self.commands[f"${name}"] = self.commands[func.__name__]
             return func
-
         return dec
 
     async def call_command(self, message: Message, command: Command):   # Вызов комманды
@@ -71,7 +66,7 @@ ai = AI()
 async def message(message: Message):
     text = message.text.lower()
     user = await bot.get_user_from_message(message)
-    ai_recognize = ai.recognite(text)
+    ai_recognize = ai.recognite(message.text)
 
     # print(ai_recognize.type)
 
@@ -102,19 +97,18 @@ async def message(message: Message):
                     break
         else:
             await message.answer("Библиотека не найдена!")
+            return
 
-        # print(library_name)
         library = bot.database.get_library(library_name)
-
         books = ""
         if len(library[1]):
             for book in library[1]:
-                books += f"{book[1]} - {book[0]}: {book[2]}\n"
+                books += f"{book[1]} - {book[0].capitalize()}: {book[2].capitalize()}\n"
 
         hrefs = ""
         if len(library[2]):
             for href in library[2]:
-                hrefs += f"{href[0]}: {href[1]}\n"
+                hrefs += f"{href[0].capitalize()}: {href[1]}\n"
 
         await message.answer(f"Библиотека: {library_name}\n\n"
                              f"[Описание]:\n{(library[0] if len(library[0]) else 'Нету')}\n\n"
@@ -124,7 +118,7 @@ async def message(message: Message):
 
 @bot.command()
 async def help(message: Message, args: list):   # Комманда help
-    if not len(args[0]):
+    if not len(args):
         msg = ""
 
         for lib in bot.commands:
@@ -155,12 +149,14 @@ async def help(message: Message, args: list):   # Комманда help
              big_desc="/library new  [lib_name] - добавить библиотеку\n\n"
                       "/library set-desc [lib_name]  [desc] - установить описание\n\n"
                       "/library add-href [lib_name]  [href_name]  [href_desc] - добавить ссылку\n\n"
-                      "/library add-book [lib_name]  [book_name]  [book_author]  [book_description] - добавить книгу\n\n")
+                      "/library add-book [lib_name]  [book_name]  [book_author]  [book_description] - добавить "
+                      "книгу\n\n")
 async def library(message: Message, args):
+    print(args)
     if len(args) < 2:
         await message.answer("Слишком мало аргуметов!")
         return
-    if args[0] == "new":
+    if "new" in args[0]:
         if bot.database.new_library(args[1]):
             await message.answer(f"Библиотека {args[1]} успешно добавлена")
         else:
@@ -170,19 +166,19 @@ async def library(message: Message, args):
     if len(args) < 3:
         await message.answer("Слишком мало аргуметов!")
         return
-    if args[0] == "set-desc":
+    if "set-desc" in args[0]:
         if bot.database.set_library_description(args[1], args[2]):
             await message.answer(f"Описание изменено!")
         else:
             await message.answer(f"Библиотека {args[1]} не найдена!")
         return
-    if args[0] == "del-href":
+    if "del-href" in args[0]:
         if bot.database.del_library_href(args[1], args[2]):
             await message.answer(f"Ссылка удалена!")
         else:
             await message.answer(f"Библиотека {args[1]} или ссылка {args[2]} не найдена!")
         return
-    if args[0] == "del-book":
+    if "del-book" in args[0]:
         if bot.database.del_library_book(args[1], args[2]):
             await message.answer(f"Книга удалена!")
         else:
@@ -192,7 +188,7 @@ async def library(message: Message, args):
     if len(args) < 4:
         await message.answer("Слишком мало аргуметов!")
         return
-    if args[0] == "add-href":
+    if "add-href" in args[0]:
         if bot.database.add_library_href(args[1], args[2], args[3]):
             await message.answer(f"Ссылка успешно добавлна")
         else:
@@ -202,7 +198,7 @@ async def library(message: Message, args):
     if len(args) < 5:
         await message.answer("Слишком мало аргуметов!")
         return
-    if args[0] == "add-book":
+    if "add-book" in args[0]:
         if bot.database.add_library_book(args[1], args[2], args[3], args[4]):
             await message.answer(f"Книга успешно добавлна")
         else:

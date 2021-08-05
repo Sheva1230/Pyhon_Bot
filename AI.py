@@ -4,12 +4,16 @@ import random
 
 
 class Command:
+    """ Информация о комманде """
+
     def __init__(self, command, args):
         self.command: str = command
         self.args: list = args
 
 
 class AIRecognized:
+    """ Ответ на вызов функции recognite класса  AI"""
+
     def __init__(self):
         self.type = None
         self.call_me = False
@@ -24,11 +28,48 @@ class AI:
 
         with open("ai_types.json", encoding="utf-8") as file:
             self.ai_types = json.load(file)
-
         with open("ai_config.json", encoding="utf-8") as file:
             self.ai_config = json.load(file)
         with open("ai_censure.json", encoding="utf-8") as file:
-            self.ai_censure = json.load(file)["CENSURE"]
+            loaded = json.load(file)
+
+            censure = loaded["CENSURE"]
+            alphabet = loaded["ALPHABET"]
+
+        if loaded["need_update"]:
+            loaded["RE_CENSURE"] = []
+
+            for word in censure:   # Пробразование цензурных слов в регул. выражения с помощью алфавита
+                gen_word = word
+
+                for buk in alphabet:
+                    if buk in gen_word:
+                        gen = buk
+                        double_buk = False
+                        for _buk in alphabet[buk]:
+                            gen += " " + _buk
+                            if len(_buk) > 1:
+                                double_buk = True
+                        if not double_buk:
+                            gen = f"[{gen.replace(' ', '')}]"
+                        else:
+                            gen = f"(?:{gen.replace(' ', '|')})"
+                        
+                        gen_word = gen_word.replace(buk, gen)
+
+                loaded["RE_CENSURE"].append(gen_word)
+                loaded["need_update"] = False  # Нужно ли при след. запуске обновить список рег. выражений
+
+        with open("ai_censure.json", 'w', encoding="utf-8") as file:
+            json.dump(loaded, file, indent=2)
+
+        """with open("ai_censure.json", encoding="utf-8") as file:
+            s = file.read()
+        with open("ai_censure.json", 'w', encoding="utf-8") as file:
+            print(s)
+            file.write(s)"""
+
+        self.ai_censure = loaded["RE_CENSURE"]
 
     @staticmethod
     def recognite_for_words(message, words) -> bool:
@@ -42,7 +83,7 @@ class AI:
             Вложенные списки первого порядка означают, что все слова в них должны быть в тексте, но не обязательно рядом
             Вложенные списки второго порядка означают, что хотя бы одно слово из них должно быть в тексте:
 
-            word=[["добрый", ["день", "вечер"]]]
+            words=[["добрый", ["день", "вечер"]]]
             ["добрый", ["день", "вечер"]] - вложенный список первого порядка
             ["день", "вечер"] - вложенный список второго порядка
 
@@ -92,8 +133,10 @@ class AI:
             return random.choice(_from[topic])
         return random.choice(_from["NO_TOPIC"])
 
-    def recognite(self, message) -> AIRecognized:
+    def recognite(self, orig_message: str) -> AIRecognized:
         ai_message = AIRecognized()   # Объект ответа
+
+        message = orig_message.lower()
 
         # Проверяем, обратились ли к боту
         if len(re.findall("\[club*|python bot\]", message)) or message.startswith("куниц"):
@@ -109,9 +152,16 @@ class AI:
         ai_message.type = message_type
 
         if message_type == "COMMAND":   # Если сообщение это комманда
-            message = message.replace(self.ai_config["command_prefix"], "", 1)
-            ai_message.command = Command(message.split()[0], None)
-            message = message.replace(f"{ai_message.command.command}", "", 1).replace(" ", "", 1)
-            ai_message.command.args = message.split("  ")
+            orig_message = orig_message.replace(self.ai_config["command_prefix"], "", 1)  # Удаляем префикс
+            ai_message.command = Command(orig_message.split()[0], None)  # Создаем объект с описанием комманды
+            orig_message = orig_message.replace(f"{ai_message.command.command}", "", 1).replace(" ", "", 1)  # Удаляем название комманды
+            ai_message.command.args = orig_message.split("\"") if "\"" in orig_message else orig_message.split("  ")
+
+            while " " in ai_message.command.args:  # Удаляем остатки пустых строк после разбивки
+                ai_message.command.args.remove(" ")
+            while "" in ai_message.command.args:
+                ai_message.command.args.remove("")
+
+            # print(ai_message.command.args)
 
         return ai_message

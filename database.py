@@ -1,15 +1,15 @@
 import sqlite3
-import re
+import random
 
 
-class DefaultType():
+class DefaultType:
     """ Изпользуется для преобразования типов полей
 
         Также гарантирует возврат поля того типа, который был передан
      """
 
-    def __init__(self, type, value):
-        self.type = type
+    def __init__(self, obj_type, value):
+        self.type = obj_type
         self.value = value
 
 
@@ -43,9 +43,11 @@ class Database:
             sql = db.cursor()
 
             sql.execute("CREATE TABLE IF NOT EXISTS chats (chat_id INT, user_id INT, fields)")
-            sql.execute("CREATE TABLE IF NOT EXISTS library (library_name, custom_names, description, books, hrefs)")
+            sql.execute("CREATE TABLE IF NOT EXISTS library (library_name, custom_names, description, books, hrefs, "
+                        "random_id)")
 
-    def get_user(self, chat_id, user_id):
+    @staticmethod
+    def get_user(chat_id, user_id):
         """ Полуить пользователя из базы данных (или создать и получить) """
 
         with sqlite3.connect("database.db") as db:
@@ -59,7 +61,8 @@ class Database:
             sql.execute("INSERT INTO chats VALUES (?, ?, ?)", (chat_id, user_id, ""))
             return [chat_id, user_id, ""]
 
-    def _get_from_field(self, field, field_name):
+    @staticmethod
+    def _get_from_field(field, field_name):
         """ Получить значение поля из строки полей """
 
         field = field.split("&")
@@ -68,19 +71,16 @@ class Database:
                 return f.split("=")[1]
         return None
 
-    def get_field(self, chat_id, user_id, field_name, default_type: DefaultType=DefaultTypes.STR):
+    def get_field(self, chat_id, user_id, field_name, default_type: DefaultType = DefaultTypes.STR):
         """ Получить значение поля определенного пользователя """
 
-        with sqlite3.connect("database.db") as db:
-            sql = db.cursor()
+        user = self.get_user(chat_id, user_id)
+        value = self._get_from_field(user[2], field_name)
 
-            user = self.get_user(chat_id, user_id)
-            value = self._get_from_field(user[2], field_name)
+        if default_type is not None and value is not None:
+            value = default_type.type(value)
 
-            if default_type is not None and value is not None:
-                value = default_type.type(value)
-
-            return value if value is not None else (default_type.value if default_type is not None else None)
+        return value if value is not None else (default_type.value if default_type is not None else None)
 
     def _set_field(self, fields, field_name, value):
         """ Установить значение поля в строке полей """
@@ -99,7 +99,8 @@ class Database:
             fields = self._set_field(user[2], field_name, value)
             sql.execute("UPDATE chats SET fields=? WHERE chat_id=? and user_id=?", (fields, chat_id, user_id))
 
-    def new_library(self, library_name) -> bool:
+    @staticmethod
+    def new_library(library_name) -> bool:
         """ Добавление новой библиотеки """
 
         with sqlite3.connect("database.db") as db:
@@ -109,7 +110,9 @@ class Database:
             if sql.fetchone():
                 return False
 
-            sql.execute("INSERT INTO library VALUES (?, ?, ?, ?, ?)", (library_name, "", "", "", ""))
+            random_id = str(random.randint(0, 999))
+
+            sql.execute("INSERT INTO library VALUES (?, ?, ?, ?, ?, ?)", (library_name, "", "", "", "", random_id))
 
             return True
 
@@ -120,14 +123,14 @@ class Database:
         librarys = self.get_all_library_names()
 
         for library in librarys:
-            if library[0] == library_name:
+            if library[0].lower() == library_name:
                 return library[0]
 
             for _lib_name in library[1]:
-                if _lib_name == library_name:
+                if _lib_name.lower() == library_name:
                     return library[0]
 
-            return None
+        return None
 
     def get_library(self, library_name) -> list:
         """ Получить библиотеку
@@ -136,8 +139,9 @@ class Database:
          """
 
         library_name = self.get_library_name(library_name)
+        print(library_name)
         if library_name is None:
-            return None
+            return []
 
         with sqlite3.connect("database.db") as db:
             sql = db.cursor()
@@ -148,11 +152,12 @@ class Database:
             books = [book.split("  ") for book in library[3].split("&") if len(book)]
             hrefs = [href.split("  ") for href in library[4].split("&") if len(href)]
 
-            # print(hrefs)
+            # print(library)
 
-            return [library[2].capitalize(), books, hrefs]
+            return [library[2], books, hrefs]
 
-    def get_all_library_names(self) -> list:
+    @staticmethod
+    def get_all_library_names() -> list:
         """ Получить все имена всех библиотек """
 
         with sqlite3.connect("database.db") as db:
