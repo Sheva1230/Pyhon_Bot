@@ -1,9 +1,10 @@
 import json
 import os
+import random
 
 from AI import AI, Command
 from database import Database, DefaultTypes
-from vkbottle.bot import Bot, Message
+from vkbottle.bot import Bot, Message, rules
 
 
 class VkBot(Bot):  # Класс бота
@@ -46,10 +47,15 @@ class VkBot(Bot):  # Класс бота
         if "$" not in command.command and command.command not in self.commands:
             command.command = f"${command.command}"
         if command.command in self.commands:
-            await self.commands[command.command][0](message, command.args)
+            msg = await self.commands[command.command][0](message, command.args)
+            if msg is not None:
+                await message.answer(msg)
 
     async def get_user_from_message(self, message: Message):
         return (await self.api.users.get(message.from_id))[0]
+
+    async def get_user_from_id(self, id):
+        return (await self.api.users.get(id))[0]
 
 
 if not os.path.isfile("config.json"):
@@ -60,6 +66,19 @@ if not os.path.isfile("config.json"):
 
 bot = VkBot()
 ai = AI()
+
+
+@bot.on.message(rules.ChatActionRule("chat_invite_user"))
+async def group_join(message: Message):
+    # print(message)
+    print("Invite: ", message.action.member_id)
+    if message.action.member_id == -206069307:
+        bot.database.add_chat(message.chat_id)
+        return "Всем привет!"
+    else:
+        user = await bot.get_user_from_id(message.action.member_id)
+        hi_phrases = ["Привет, {}", "Приветствую тебя, {}, добро пожаловать в беседу!"]
+        return random.choice(hi_phrases).format(user.first_name)
 
 
 @bot.on.message()
@@ -131,6 +150,7 @@ async def help(message: Message, args: list):   # Комманда help
         return
     if args[0].replace("/", "") in bot.commands:
         com = bot.commands[args[0].replace("/", "")]
+        print(com)
 
         msg = "Доступные сокращения:"
         for alias in com[3]:
@@ -144,66 +164,105 @@ async def help(message: Message, args: list):   # Комманда help
         return
 
 
+@bot.command(["sets"],
+             description="Настройки беседы",
+             big_desc="/settings list - список настроек беседы\n\n"
+                      "/settings set [name] [value]")
+async def settings(message: Message, args):
+    args_count = len(args)
+    less_args_count = "Слишком мало аргуметов!"
+
+    if args_count < 1:
+        return less_args_count
+
+    print(args)
+
+    if args[0] == "list":
+        msg = ""
+        av_chat_settings = list(bot.database.available_chat_settings)
+
+        if args_count > 1:
+            try:
+                args[1] = int(args[1]) - 1
+
+                if args[1]*5 > len(av_chat_settings):
+                    av_chat_settings = av_chat_settings[:-5]
+                else:
+                    av_chat_settings = av_chat_settings[args[2]*5:args[2]*5+5]
+
+                for setting in av_chat_settings:
+                    msg += f"{setting} = {bot.database.get_chat_setting(message.chat_id, setting_name=setting)}\n"
+                return msg
+
+            except TypeError:
+                pass
+
+        for setting in av_chat_settings[:5]:
+            msg += f"{setting} = {bot.database.get_chat_setting(message.chat_id, setting_name=setting)}\n"
+        return msg
+
+    if args_count < 3:
+        return less_args_count
+
+    if args[0] == "set":
+        if args[1] not in bot.database.available_chat_settings:
+            return f"Не найдено: {args[1]}"
+
+        bot.database.set_chat_setting(message.chat_id, args[1], args[2])
+        return f"{args[1]} = {bot.database.get_chat_setting(message.chat_id, setting_name=args[1])}"
+
+
 @bot.command(["библ"],
              description="Работа со списком библиотек",
-             big_desc="/library new  [lib_name] - добавить библиотеку\n\n"
-                      "/library set-desc [lib_name]  [desc] - установить описание\n\n"
-                      "/library add-href [lib_name]  [href_name]  [href_desc] - добавить ссылку\n\n"
-                      "/library add-book [lib_name]  [book_name]  [book_author]  [book_description] - добавить "
+             big_desc="/library new [lib_name] - добавить библиотеку\n\n"
+                      "/library set-desc [lib_name] [desc] - установить описание\n\n"
+                      "/library add-href [lib_name] [href_name] [href_desc] - добавить ссылку\n\n"
+                      "/library add-book [lib_name] [book_name] [book_author] [book_description] - добавить "
                       "книгу\n\n")
 async def library(message: Message, args):
     print(args)
     if len(args) < 2:
-        await message.answer("Слишком мало аргуметов!")
-        return
+        return "Слишком мало аргуметов!"
     if "new" in args[0]:
         if bot.database.new_library(args[1]):
-            await message.answer(f"Библиотека {args[1]} успешно добавлена")
+            return f"Библиотека {args[1]} успешно добавлена"
         else:
-            await message.answer(f"Библиотека {args[1]} уже существует")
-        return
+            return f"Библиотека {args[1]} уже существует"
 
     if len(args) < 3:
-        await message.answer("Слишком мало аргуметов!")
-        return
+        return "Слишком мало аргуметов!"
     if "set-desc" in args[0]:
         if bot.database.set_library_description(args[1], args[2]):
-            await message.answer(f"Описание изменено!")
+            return f"Описание изменено!"
         else:
-            await message.answer(f"Библиотека {args[1]} не найдена!")
-        return
+            return f"Библиотека {args[1]} не найдена!"
     if "del-href" in args[0]:
         if bot.database.del_library_href(args[1], args[2]):
-            await message.answer(f"Ссылка удалена!")
+            return f"Ссылка удалена!"
         else:
-            await message.answer(f"Библиотека {args[1]} или ссылка {args[2]} не найдена!")
-        return
+            return f"Библиотека {args[1]} или ссылка {args[2]} не найдена!"
     if "del-book" in args[0]:
         if bot.database.del_library_book(args[1], args[2]):
-            await message.answer(f"Книга удалена!")
+            return f"Книга удалена!"
         else:
-            await message.answer(f"Библиотека {args[1]} или книга {args[2]} не найдена!")
-        return
+            return f"Библиотека {args[1]} или книга {args[2]} не найдена!"
 
     if len(args) < 4:
-        await message.answer("Слишком мало аргуметов!")
-        return
+        return "Слишком мало аргуметов!"
+
     if "add-href" in args[0]:
         if bot.database.add_library_href(args[1], args[2], args[3]):
-            await message.answer(f"Ссылка успешно добавлна")
+            return f"Ссылка успешно добавлна"
         else:
-            await message.answer(f"Библиотека {args[1]} не найдена или ссылка {args[1]} уже есть!")
-        return
+            return f"Библиотека {args[1]} не найдена или ссылка {args[1]} уже есть!"
 
     if len(args) < 5:
-        await message.answer("Слишком мало аргуметов!")
-        return
+        return "Слишком мало аргуметов!"
     if "add-book" in args[0]:
         if bot.database.add_library_book(args[1], args[2], args[3], args[4]):
-            await message.answer(f"Книга успешно добавлна")
+            return f"Книга успешно добавлна"
         else:
-            await message.answer(f"Библиотека {args[1]} не найдена или книга {args[1]} уже есть!")
-        return
+            return f"Библиотека {args[1]} не найдена или книга {args[1]} уже есть!"
 
 
 print("!Run!")

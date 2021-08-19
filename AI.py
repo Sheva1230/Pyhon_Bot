@@ -153,15 +153,25 @@ class AI:
 
         if message_type == "COMMAND":   # Если сообщение это комманда
             orig_message = orig_message.replace(self.ai_config["command_prefix"], "", 1)  # Удаляем префикс
-            ai_message.command = Command(orig_message.split()[0], None)  # Создаем объект с описанием комманды
-            orig_message = orig_message.replace(f"{ai_message.command.command}", "", 1).replace(" ", "", 1)  # Удаляем название комманды
-            ai_message.command.args = orig_message.split("\"") if "\"" in orig_message else orig_message.split("  ")
+            ai_message.command = Command(orig_message.split()[0], [])  # Создаем объект с описанием комманды
+            orig_message = orig_message.replace(f"{ai_message.command.command}", "", 1)  # Удаляем название комманды
 
-            while " " in ai_message.command.args:  # Удаляем остатки пустых строк после разбивки
-                ai_message.command.args.remove(" ")
-            while "" in ai_message.command.args:
-                ai_message.command.args.remove("")
+            big_args = re.findall('[^/]["].*[^/]["]', orig_message)  # Ишем "большие" аргументы
 
-            # print(ai_message.command.args)
+            for big_arg in range(len(big_args)):  # Заменяем "большие" аргументы на символ: "
+                big_args[big_arg] = big_args[big_arg][1:]
+                orig_message = orig_message.replace(big_args[big_arg], "\"")
+            orig_message = orig_message.split()
+
+            counter = 0
+            for arg in orig_message:
+                if arg == "" or arg == " ":
+                    continue
+
+                if arg == "\"":  # Если встречаесс символ: ", то берем элемент из списка "больших" аргументов
+                    ai_message.command.args.append(big_args[counter])
+                    counter += 1
+                    continue
+                ai_message.command.args.append(arg)
 
         return ai_message
